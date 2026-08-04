@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type TaskType = 'simple' | 'timer' | 'youtube';
+type TaskType = 'ad' | 'youtube';
 
 interface Task {
   id: number;
@@ -10,63 +10,57 @@ interface Task {
   icon: string;
   completed: boolean;
   type: TaskType;
-  requiredSeconds?: number;
   url?: string;
 }
 
-const STORAGE_KEY = 'key-locker-progress';
+const STORAGE_KEY = 'key-locker-max-revenue';
+const AD_SECONDS = 60;
+const AD_ZONE = '11500503';
+const AD_SRC = 'https://al5sm.com/tag.min.js';
 
 const initialTasks: Task[] = [
   {
     id: 1,
-    title: 'Stay on Page',
-    description: 'Stay on this page for 60 seconds',
-    icon: '⏱️',
+    title: 'Step 1 — Unlock Vault',
+    description: 'Watch an ad to begin',
+    icon: '🔓',
     completed: false,
-    type: 'timer',
-    requiredSeconds: 60,
+    type: 'ad',
   },
   {
     id: 2,
-    title: 'Explore the Vault',
-    description: 'Stay on the vault page for 60 seconds',
-    icon: '🏦',
+    title: 'Step 2 — Open Archive',
+    description: 'Watch an ad to proceed',
+    icon: '📂',
     completed: false,
-    type: 'timer',
-    requiredSeconds: 60,
+    type: 'ad',
   },
   {
     id: 3,
-    title: 'Watch the Showcase',
-    description: 'Stay on the showcase page for 60 seconds',
-    icon: '🎬',
+    title: 'Step 3 — Access Chamber',
+    description: 'Watch an ad to continue',
+    icon: '🗝️',
     completed: false,
-    type: 'timer',
-    requiredSeconds: 60,
+    type: 'ad',
   },
   {
     id: 4,
-    title: 'Review the Features',
-    description: 'Stay on the features page for 60 seconds',
-    icon: '✨',
+    title: 'Step 4 — Break Final Seal',
+    description: 'Watch an ad to unlock',
+    icon: '🔥',
     completed: false,
-    type: 'timer',
-    requiredSeconds: 60,
+    type: 'ad',
   },
   {
     id: 5,
-    title: 'Subscribe to YouTube',
-    description: 'Subscribe to our YouTube channel',
+    title: 'Step 5 — Subscribe to YouTube',
+    description: 'Subscribe to our channel',
     icon: '▶️',
     completed: false,
     type: 'youtube',
     url: 'https://www.youtube.com/@SilasRoam',
   },
 ];
-
-interface TimerProgress {
-  [taskId: number]: number;
-}
 
 function loadSavedState() {
   try {
@@ -88,36 +82,36 @@ function App() {
     }
     return initialTasks;
   });
-  const [unlocked, setUnlocked] = useState(false);
-  const [showReward, setShowReward] = useState(false);
-  const [shake, setShake] = useState(false);
-  const [timerProgress, setTimerProgress] = useState<TimerProgress>(() => {
+  const [countdowns, setCountdowns] = useState<Record<number, number>>(() => {
     const saved = loadSavedState();
-    return saved?.timerProgress || {};
+    return saved?.countdowns || {};
   });
-  const [isPageActive, setIsPageActive] = useState(true);
   const [youtubeVerified, setYoutubeVerified] = useState<Record<number, boolean>>(() => {
     const saved = loadSavedState();
     return saved?.youtubeVerified || {};
   });
+  const [unlocked, setUnlocked] = useState(false);
+  const [showReward, setShowReward] = useState(false);
+  const [shake, setShake] = useState(false);
   const [checkingYoutube, setCheckingYoutube] = useState<number | null>(null);
+  const [isPageActive, setIsPageActive] = useState(true);
 
   const timerRef = useRef<number | null>(null);
-  const lastTickRef = useRef<number>(Date.now());
 
-  const completedCount = tasks.filter((t) => t.completed).length;
+  const currentStepIndex = tasks.findIndex((t) => !t.completed);
+  const isAllComplete = currentStepIndex === -1;
   const totalTasks = tasks.length;
-  const isAllComplete = completedCount === totalTasks;
+  const completedCount = tasks.filter((t) => t.completed).length;
 
   // Save progress to localStorage
   useEffect(() => {
-    const state = { tasks, timerProgress, youtubeVerified };
+    const state = { tasks, countdowns, youtubeVerified };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
       console.error('Failed to save state:', e);
     }
-  }, [tasks, timerProgress, youtubeVerified]);
+  }, [tasks, countdowns, youtubeVerified]);
 
   // Track page visibility
   useEffect(() => {
@@ -139,42 +133,26 @@ function App() {
     };
   }, []);
 
-  // Timer logic for time-based tasks
+  // Countdown timer for the current ad step (pauses when page is hidden)
   useEffect(() => {
-    const activeTimerTasks = tasks.filter(
-      (t) => t.type === 'timer' && !t.completed
-    );
+    if (currentStepIndex === -1) return;
+    const currentTask = tasks[currentStepIndex];
+    if (!currentTask || currentTask.completed || currentTask.type !== 'ad') return;
 
-    if (activeTimerTasks.length === 0 || !isPageActive) {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      return;
-    }
+    const remaining = countdowns[currentTask.id];
+    if (remaining === undefined || remaining <= 0 || !isPageActive) return;
 
-    lastTickRef.current = Date.now();
+    let lastTick = Date.now();
 
     timerRef.current = window.setInterval(() => {
       const now = Date.now();
-      const delta = (now - lastTickRef.current) / 1000;
-      lastTickRef.current = now;
+      const delta = (now - lastTick) / 1000;
+      lastTick = now;
 
-      setTimerProgress((prev) => {
-        const newProgress = { ...prev };
-        let changed = false;
-
-        activeTimerTasks.forEach((task) => {
-          const current = newProgress[task.id] || 0;
-          const next = Math.min(current + delta, task.requiredSeconds || 60);
-          if (next !== current) {
-            newProgress[task.id] = next;
-            changed = true;
-          }
-        });
-
-        if (!changed) return prev;
-        return newProgress;
+      setCountdowns((prev) => {
+        const current = prev[currentTask.id] || 0;
+        const next = Math.max(0, current - delta);
+        return { ...prev, [currentTask.id]: next };
       });
     }, 250);
 
@@ -184,43 +162,52 @@ function App() {
         timerRef.current = null;
       }
     };
-  }, [tasks, isPageActive]);
+  }, [currentStepIndex, tasks, isPageActive]);
 
-  // Check if any timer tasks are complete
+  // Complete the ad step when its countdown reaches zero
   useEffect(() => {
-    const timerTasks = tasks.filter((t) => t.type === 'timer' && !t.completed);
-    if (timerTasks.length === 0) return;
+    if (currentStepIndex === -1) return;
+    const currentTask = tasks[currentStepIndex];
+    if (!currentTask || currentTask.completed || currentTask.type !== 'ad') return;
 
-    const newlyCompleted = timerTasks.filter(
-      (t) => (timerProgress[t.id] || 0) >= (t.requiredSeconds || 60)
-    );
+    const remaining = countdowns[currentTask.id];
+    if (remaining === undefined) return;
 
-    if (newlyCompleted.length > 0) {
+    if (remaining <= 0) {
       setTasks((prev) =>
-        prev.map((task) =>
-          newlyCompleted.some((nc) => nc.id === task.id)
-            ? { ...task, completed: true }
-            : task
+        prev.map((t) =>
+          t.id === currentTask.id ? { ...t, completed: true } : t
         )
       );
+      setCountdowns((prev) => {
+        const next = { ...prev };
+        delete next[currentTask.id];
+        return next;
+      });
     }
-  }, [timerProgress, tasks]);
+  }, [countdowns, currentStepIndex, tasks]);
 
-  const completeTask = useCallback(
-    (id: number) => {
-      if (unlocked) return;
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === id && !task.completed ? { ...task, completed: true } : task
-        )
-      );
-    },
-    [unlocked]
-  );
+  // Monetag ad trigger
+  const triggerAd = useCallback(() => {
+    try {
+      const s = document.createElement('script');
+      s.dataset.zone = AD_ZONE;
+      s.src = AD_SRC;
+      document.body.appendChild(s);
+    } catch (e) {
+      console.error('Failed to trigger ad:', e);
+    }
+  }, []);
+
+  const handleAdClick = (task: Task) => {
+    if (task.completed || unlocked || isAllComplete) return;
+    triggerAd();
+    setCountdowns((prev) => ({ ...prev, [task.id]: AD_SECONDS }));
+  };
 
   const resetAll = useCallback(() => {
     setTasks(initialTasks.map((t) => ({ ...t, completed: false })));
-    setTimerProgress({});
+    setCountdowns({});
     setYoutubeVerified({});
     setUnlocked(false);
     setShowReward(false);
@@ -231,21 +218,19 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    if (isAllComplete && !unlocked) {
-      const timer = setTimeout(() => {
-        setUnlocked(true);
-        setShowReward(true);
-      }, 600);
-      return () => clearTimeout(timer);
-    }
-  }, [isAllComplete, unlocked]);
-
   const handleBoxClick = () => {
-    if (!isAllComplete) {
+    if (!isAllComplete || unlocked) {
       setShake(true);
       setTimeout(() => setShake(false), 500);
     }
+  };
+
+  const handleGetKey = () => {
+    if (!isAllComplete || unlocked) return;
+    setUnlocked(true);
+    setTimeout(() => {
+      setShowReward(true);
+    }, 1000);
   };
 
   const handleYoutubeCheck = (task: Task) => {
@@ -255,18 +240,17 @@ function App() {
     // Simulate verification check
     setTimeout(() => {
       setYoutubeVerified((prev) => ({ ...prev, [task.id]: true }));
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id ? { ...t, completed: true } : t
+        )
+      );
       setCheckingYoutube(null);
     }, 1500);
   };
 
-  const formatTime = (seconds: number) => {
-    const remaining = Math.max(0, Math.ceil(seconds));
-    const mins = Math.floor(remaining / 60);
-    const secs = remaining % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const renderTaskAction = (task: Task) => {
+  const renderTaskAction = (task: Task, index: number) => {
+    // Completed task
     if (task.completed) {
       return (
         <span className="shrink-0 px-4 py-2 rounded-lg text-sm font-semibold bg-crimson-500/10 text-crimson-400 border border-crimson-500/20 cursor-default">
@@ -275,47 +259,80 @@ function App() {
       );
     }
 
-    if (task.type === 'timer') {
-      const progress = timerProgress[task.id] || 0;
-      const required = task.requiredSeconds || 60;
-      const percent = Math.min(100, (progress / required) * 100);
-      const isActive = isPageActive && !unlocked;
-
+    // Locked until previous step is fully completed
+    if (index > currentStepIndex) {
       return (
-        <div className="shrink-0 flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-2">
-            <span
-              className={`text-xs font-mono font-semibold ${
-                isActive ? 'text-crimson-400' : 'text-white/40'
-              }`}
-            >
-              {formatTime(required - progress)}
-            </span>
-            {isActive ? (
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-crimson-500 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-crimson-500" />
-              </span>
-            ) : (
-              <span className="w-2 h-2 rounded-full bg-white/20" />
-            )}
-          </div>
-          <div className="w-24 h-1.5 rounded-full bg-void-600 overflow-hidden">
-            <motion.div
-              className="h-full rounded-full bg-crimson-gradient"
-              animate={{ width: `${percent}%` }}
-              transition={{ duration: 0.3 }}
+        <span className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-void-600/50 text-white/30 border border-white/5 cursor-not-allowed">
+          <svg
+            className="w-3.5 h-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
             />
-          </div>
-          {!isActive && (
-            <span className="text-[10px] text-white/40 uppercase tracking-wider">
-              Paused
-            </span>
-          )}
-        </div>
+          </svg>
+          Locked
+        </span>
       );
     }
 
+    // Current ad step — mandatory ad trigger
+    if (task.type === 'ad') {
+      const remaining = countdowns[task.id];
+      const isCounting = remaining !== undefined && remaining > 0;
+
+      if (isCounting) {
+        const percent = ((AD_SECONDS - remaining) / AD_SECONDS) * 100;
+        return (
+          <div className="shrink-0 flex flex-col items-end gap-1.5 w-36">
+            <div className="flex items-center gap-2 w-full justify-end">
+              <motion.span
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                className="w-3 h-3 border-2 border-crimson-400 border-t-transparent rounded-full"
+              />
+              <span className="text-xs font-mono font-semibold text-crimson-400">
+                {Math.ceil(remaining)}s
+              </span>
+            </div>
+            <div className="w-full h-1.5 rounded-full bg-void-600 overflow-hidden">
+              <motion.div
+                className="h-full rounded-full bg-crimson-gradient"
+                animate={{ width: `${percent}%` }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+            <button
+              disabled
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-void-700 text-white/40 border border-white/10 cursor-not-allowed"
+            >
+              Wait ({Math.ceil(remaining)}s)...
+            </button>
+          </div>
+        );
+      }
+
+      return (
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => handleAdClick(task)}
+          className="btn-crimson !px-4 !py-2 !text-sm shrink-0"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-lg leading-none">📺</span>
+            Watch Ad
+          </span>
+        </motion.button>
+      );
+    }
+
+    // YouTube step
     if (task.type === 'youtube') {
       const verified = youtubeVerified[task.id];
       return (
@@ -359,15 +376,7 @@ function App() {
       );
     }
 
-    return (
-      <button
-        onClick={() => completeTask(task.id)}
-        disabled={unlocked}
-        className="shrink-0 px-4 py-2 rounded-lg text-sm font-semibold btn-crimson !px-4 !py-2 !text-sm"
-      >
-        Complete
-      </button>
-    );
+    return null;
   };
 
   return (
@@ -582,13 +591,17 @@ function App() {
                         {unlocked ? (
                           <span className="shimmer-text">Reward Unlocked!</span>
                         ) : (
-                          <span className="text-white/90">Locked Reward</span>
+                          <span className="text-white/90">
+                            {isAllComplete ? 'All Steps Complete!' : 'Locked Reward'}
+                          </span>
                         )}
                       </h2>
                       <p className="text-white/50 text-sm sm:text-base">
                         {unlocked
-                          ? 'Congratulations! Your reward is ready.'
-                          : `Complete all ${totalTasks} tasks to unlock`}
+                          ? 'Congratulations! Your key is ready.'
+                          : isAllComplete
+                            ? 'Press GET ACCESS KEY to claim your reward.'
+                            : `Complete all ${totalTasks} steps to unlock`}
                       </p>
                     </div>
 
@@ -610,6 +623,26 @@ function App() {
                         />
                       </div>
                     </div>
+
+                    {/* Get Access Key button — only active when ALL steps complete */}
+                    <AnimatePresence>
+                      {isAllComplete && !unlocked && (
+                        <motion.button
+                          initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={handleGetKey}
+                          className="btn-crimson w-full !py-4 !text-base font-bold tracking-widest"
+                        >
+                          <span className="flex items-center justify-center gap-2">
+                            <span className="text-xl leading-none">🔑</span>
+                            GET ACCESS KEY
+                          </span>
+                        </motion.button>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </motion.div>
               </motion.div>
@@ -633,13 +666,13 @@ function App() {
                         🎁
                       </motion.div>
                       <h3 className="font-display font-bold text-2xl mb-2 text-gradient-crimson">
-                        Reward Claimed!
+                        Key Claimed!
                       </h3>
                       <p className="text-white/60 text-sm mb-6">
-                        You've unlocked a special bonus. Check your inventory to claim it.
+                        You've unlocked your access key. Check your inventory to claim it.
                       </p>
                       <button onClick={resetAll} className="btn-ghost w-full">
-                        Reset & Play Again
+                        Reset & Start Again
                       </button>
                     </div>
                   </motion.div>
@@ -659,10 +692,10 @@ function App() {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="font-display font-bold text-xl sm:text-2xl">
-                    Mission <span className="text-gradient-crimson">Tasks</span>
+                    Mission <span className="text-gradient-crimson">Steps</span>
                   </h2>
                   <p className="text-white/40 text-sm mt-1">
-                    Complete all tasks to unlock the reward
+                    Complete steps in order to unlock the reward
                   </p>
                 </div>
                 <div className="glass-card px-4 py-2 text-center">
@@ -684,14 +717,20 @@ function App() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.4, delay: 0.4 + index * 0.1 }}
                     className={`glass-card glass-card-hover p-4 flex items-center gap-4 ${
-                      task.completed ? 'border-crimson-500/30' : ''
+                      task.completed
+                        ? 'border-crimson-500/30'
+                        : index === currentStepIndex
+                          ? 'border-crimson-500/40 shadow-crimson-glow-sm'
+                          : ''
                     }`}
                   >
                     <div
                       className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 transition-all duration-300 ${
                         task.completed
                           ? 'bg-crimson-gradient shadow-crimson-glow-sm'
-                          : 'bg-void-700 border border-white/5'
+                          : index === currentStepIndex
+                            ? 'bg-crimson-500/10 border border-crimson-500/30'
+                            : 'bg-void-700 border border-white/5'
                       }`}
                     >
                       {task.completed ? (
@@ -712,11 +751,31 @@ function App() {
                           />
                         </motion.svg>
                       ) : (
-                        <span className="opacity-60">{task.icon}</span>
+                        <span className={index > currentStepIndex ? 'opacity-30' : 'opacity-60'}>
+                          {task.icon}
+                        </span>
                       )}
                     </div>
 
                     <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wider ${
+                            task.completed
+                              ? 'text-crimson-400'
+                              : index === currentStepIndex
+                                ? 'text-crimson-300'
+                                : 'text-white/30'
+                          }`}
+                        >
+                          Step {index + 1}/{totalTasks}
+                        </span>
+                        {index === currentStepIndex && !task.completed && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wider bg-crimson-500/20 text-crimson-300 px-2 py-0.5 rounded-full border border-crimson-500/30">
+                            Active
+                          </span>
+                        )}
+                      </div>
                       <h3
                         className={`font-semibold text-sm sm:text-base truncate ${
                           task.completed ? 'text-white/60 line-through' : 'text-white'
@@ -729,7 +788,7 @@ function App() {
                       </p>
                     </div>
 
-                    {renderTaskAction(task)}
+                    {renderTaskAction(task, index)}
                   </motion.div>
                 ))}
               </div>
@@ -752,10 +811,10 @@ function App() {
                     </motion.span>
                     <div>
                       <p className="font-semibold text-crimson-300 text-sm">
-                        All tasks complete!
+                        All steps complete!
                       </p>
                       <p className="text-white/50 text-xs">
-                        Your reward is being unlocked...
+                        Click the GET ACCESS KEY button to unlock your reward.
                       </p>
                     </div>
                   </motion.div>
