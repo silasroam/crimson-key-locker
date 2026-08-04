@@ -187,7 +187,7 @@ function App() {
     }
   }, [countdowns, currentStepIndex, tasks]);
 
-  // Monetag ad trigger
+  // Monetag ad trigger — fires instantly on first click
   const triggerAd = useCallback(() => {
     try {
       const s = document.createElement('script');
@@ -198,12 +198,6 @@ function App() {
       console.error('Failed to trigger ad:', e);
     }
   }, []);
-
-  const handleAdClick = (task: Task) => {
-    if (task.completed || unlocked || isAllComplete) return;
-    triggerAd();
-    setCountdowns((prev) => ({ ...prev, [task.id]: AD_SECONDS }));
-  };
 
   const resetAll = useCallback(() => {
     setTasks(initialTasks.map((t) => ({ ...t, completed: false })));
@@ -281,7 +275,7 @@ function App() {
       );
     }
 
-    // Current ad step — mandatory ad trigger
+    // Current ad step — mandatory ad trigger, fires instantly on first click
     if (task.type === 'ad') {
       const remaining = countdowns[task.id];
       const isCounting = remaining !== undefined && remaining > 0;
@@ -318,17 +312,19 @@ function App() {
       }
 
       return (
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => handleAdClick(task)}
+        <button
+          type="button"
+          onClick={() => {
+            triggerAd();
+            setCountdowns((prev) => ({ ...prev, [task.id]: AD_SECONDS }));
+          }}
           className="btn-crimson !px-4 !py-2 !text-sm shrink-0"
         >
           <span className="flex items-center gap-2">
             <span className="text-lg leading-none">📺</span>
             Watch Ad
           </span>
-        </motion.button>
+        </button>
       );
     }
 
@@ -380,7 +376,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div className="min-h-screen relative overflow-x-hidden w-full max-w-full">
       {/* Background decorative elements */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-crimson-radial opacity-60" />
@@ -411,7 +407,7 @@ function App() {
         ))}
       </div>
 
-      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+      <div className="relative z-10 w-full max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 overflow-x-hidden">
         {/* Header */}
         <header className="flex items-center justify-between mb-8 sm:mb-12">
           <motion.div
