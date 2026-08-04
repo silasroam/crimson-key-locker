@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type TaskType = 'ad' | 'youtube';
@@ -133,7 +133,7 @@ function App() {
     };
   }, []);
 
-  // Countdown timer for the current ad step (pauses when page is hidden)
+  // Countdown ticking — only decrements when page is active
   useEffect(() => {
     if (currentStepIndex === -1) return;
     const currentTask = tasks[currentStepIndex];
@@ -187,19 +187,31 @@ function App() {
     }
   }, [countdowns, currentStepIndex, tasks]);
 
-  // Monetag ad trigger — fires instantly on first click
-  const triggerAd = useCallback(() => {
+  // Monetag ad trigger — SYNCHRONOUS, fires immediately in the click handler
+  const triggerAd = () => {
     try {
       const s = document.createElement('script');
       s.dataset.zone = AD_ZONE;
       s.src = AD_SRC;
+      s.async = true;
       document.body.appendChild(s);
     } catch (e) {
       console.error('Failed to trigger ad:', e);
     }
-  }, []);
+  };
 
-  const resetAll = useCallback(() => {
+  // Handle ad step click — fires on FIRST click: ad → timer → state
+  const handleTaskClick = (task: Task) => {
+    if (task.completed || unlocked || isAllComplete) return;
+
+    // 1. Trigger ad IMMEDIATELY (synchronous, not via useEffect)
+    triggerAd();
+
+    // 2. Start countdown timer
+    setCountdowns((prev) => ({ ...prev, [task.id]: AD_SECONDS }));
+  };
+
+  const resetAll = () => {
     setTasks(initialTasks.map((t) => ({ ...t, completed: false })));
     setCountdowns({});
     setYoutubeVerified({});
@@ -210,7 +222,7 @@ function App() {
     } catch (e) {
       console.error('Failed to clear storage:', e);
     }
-  }, []);
+  };
 
   const handleBoxClick = () => {
     if (!isAllComplete || unlocked) {
@@ -231,7 +243,6 @@ function App() {
     if (task.completed || unlocked) return;
     setCheckingYoutube(task.id);
 
-    // Simulate verification check
     setTimeout(() => {
       setYoutubeVerified((prev) => ({ ...prev, [task.id]: true }));
       setTasks((prev) =>
@@ -247,7 +258,7 @@ function App() {
     // Completed task
     if (task.completed) {
       return (
-        <span className="shrink-0 px-4 py-2 rounded-lg text-sm font-semibold bg-crimson-500/10 text-crimson-400 border border-crimson-500/20 cursor-default">
+        <span className="shrink-0 w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-semibold bg-crimson-500/10 text-crimson-400 border border-crimson-500/20 cursor-default text-center">
           Done
         </span>
       );
@@ -256,7 +267,7 @@ function App() {
     // Locked until previous step is fully completed
     if (index > currentStepIndex) {
       return (
-        <span className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-void-600/50 text-white/30 border border-white/5 cursor-not-allowed">
+        <span className="shrink-0 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-void-600/50 text-white/30 border border-white/5 cursor-not-allowed">
           <svg
             className="w-3.5 h-3.5"
             fill="none"
@@ -275,7 +286,7 @@ function App() {
       );
     }
 
-    // Current ad step — mandatory ad trigger, fires instantly on first click
+    // Current ad step — fires synchronously on FIRST click
     if (task.type === 'ad') {
       const remaining = countdowns[task.id];
       const isCounting = remaining !== undefined && remaining > 0;
@@ -283,8 +294,8 @@ function App() {
       if (isCounting) {
         const percent = ((AD_SECONDS - remaining) / AD_SECONDS) * 100;
         return (
-          <div className="shrink-0 flex flex-col items-end gap-1.5 w-36">
-            <div className="flex items-center gap-2 w-full justify-end">
+          <div className="shrink-0 w-full sm:w-36 flex flex-col items-center sm:items-end gap-1.5">
+            <div className="flex items-center gap-2 w-full justify-center sm:justify-end">
               <motion.span
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
@@ -303,7 +314,7 @@ function App() {
             </div>
             <button
               disabled
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-void-700 text-white/40 border border-white/10 cursor-not-allowed"
+              className="w-full px-3 py-1.5 rounded-lg text-xs font-semibold bg-void-700 text-white/40 border border-white/10 cursor-not-allowed"
             >
               Wait ({Math.ceil(remaining)}s)...
             </button>
@@ -314,13 +325,10 @@ function App() {
       return (
         <button
           type="button"
-          onClick={() => {
-            triggerAd();
-            setCountdowns((prev) => ({ ...prev, [task.id]: AD_SECONDS }));
-          }}
-          className="btn-crimson !px-4 !py-2 !text-sm shrink-0"
+          onClick={() => handleTaskClick(task)}
+          className="btn-crimson !px-4 !py-2 !text-sm shrink-0 w-full sm:w-auto"
         >
-          <span className="flex items-center gap-2">
+          <span className="flex items-center justify-center gap-2">
             <span className="text-lg leading-none">📺</span>
             Watch Ad
           </span>
@@ -332,12 +340,12 @@ function App() {
     if (task.type === 'youtube') {
       const verified = youtubeVerified[task.id];
       return (
-        <div className="shrink-0 flex flex-col items-end gap-2">
+        <div className="shrink-0 w-full sm:w-auto flex flex-col items-stretch sm:items-end gap-2">
           <a
             href={task.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[#FF0000] hover:bg-[#CC0000] transition-all duration-300 shadow-[0_0_20px_-4px_rgba(255,0,0,0.5)] hover:shadow-[0_0_30px_-4px_rgba(255,0,0,0.8)]"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[#FF0000] hover:bg-[#CC0000] transition-all duration-300 shadow-[0_0_20px_-4px_rgba(255,0,0,0.5)] hover:shadow-[0_0_30px_-4px_rgba(255,0,0,0.8)]"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
@@ -376,12 +384,12 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden w-full max-w-full">
+    <div className="min-h-dvh w-full max-w-full relative overflow-x-hidden flex flex-col">
       {/* Background decorative elements */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-crimson-radial opacity-60" />
-        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-crimson-radial opacity-40" />
-        <div className="absolute top-1/3 left-0 w-[300px] h-[300px] bg-crimson-radial opacity-30" />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] max-w-full h-[600px] bg-crimson-radial opacity-60" />
+        <div className="absolute bottom-0 right-0 w-[400px] max-w-full h-[400px] bg-crimson-radial opacity-40" />
+        <div className="absolute top-1/3 left-0 w-[300px] max-w-full h-[300px] bg-crimson-radial opacity-30" />
       </div>
 
       {/* Floating particles */}
@@ -407,16 +415,16 @@ function App() {
         ))}
       </div>
 
-      <div className="relative z-10 w-full max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 overflow-x-hidden">
+      <div className="relative z-10 w-full max-w-full flex-1 mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Header */}
-        <header className="flex items-center justify-between mb-8 sm:mb-12">
+        <header className="flex flex-col sm:flex-row items-center sm:items-center justify-between gap-3 mb-6 sm:mb-10">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6 }}
-            className="flex items-center gap-3"
+            className="flex items-center gap-3 w-full sm:w-auto"
           >
-            <div className="w-10 h-10 rounded-xl bg-crimson-gradient flex items-center justify-center shadow-crimson-glow">
+            <div className="w-10 h-10 rounded-xl bg-crimson-gradient flex items-center justify-center shadow-crimson-glow shrink-0">
               <svg
                 className="w-5 h-5 text-white"
                 fill="none"
@@ -431,8 +439,8 @@ function App() {
                 />
               </svg>
             </div>
-            <div>
-              <h1 className="font-display font-bold text-xl sm:text-2xl tracking-tight">
+            <div className="min-w-0">
+              <h1 className="font-display font-bold text-lg sm:text-2xl tracking-tight truncate">
                 Key <span className="text-gradient-crimson">Locker</span>
               </h1>
               <p className="text-xs text-white/40 -mt-0.5">Secure Vault System</p>
@@ -443,7 +451,7 @@ function App() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="glass-card px-4 py-2 flex items-center gap-2"
+            className="glass-card px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 shrink-0 w-full sm:w-auto justify-center"
           >
             <span className="relative flex h-2.5 w-2.5">
               <span
@@ -457,22 +465,22 @@ function App() {
                 }`}
               />
             </span>
-            <span className="text-sm font-medium text-white/80">
+            <span className="text-xs sm:text-sm font-medium text-white/80">
               {isPageActive ? 'System Online' : 'System Paused'}
             </span>
           </motion.div>
         </header>
 
         {/* Main content */}
-        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-start w-full">
           {/* Left: Reward Box */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="flex flex-col items-center"
+            className="flex flex-col items-center w-full"
           >
-            <div className="relative w-full max-w-md">
+            <div className="relative w-full max-w-md mx-auto">
               {/* Glow behind box */}
               <div
                 className={`absolute inset-0 rounded-full blur-3xl transition-all duration-700 ${
@@ -498,10 +506,10 @@ function App() {
                       : {}
                   }
                   transition={{ duration: 1.2, ease: 'easeInOut' }}
-                  className="glass-card p-8 sm:p-10 cursor-pointer select-none"
+                  className="glass-card p-5 sm:p-8 cursor-pointer select-none w-full"
                   onClick={handleBoxClick}
                 >
-                  <div className="flex flex-col items-center gap-6">
+                  <div className="flex flex-col items-center gap-4 sm:gap-6 w-full">
                     {/* Box icon */}
                     <motion.div
                       animate={
@@ -517,7 +525,7 @@ function App() {
                       className="relative"
                     >
                       <div
-                        className={`w-28 h-28 sm:w-36 sm:h-36 rounded-2xl flex items-center justify-center transition-all duration-500 ${
+                        className={`w-24 h-24 sm:w-32 sm:h-32 rounded-2xl flex items-center justify-center transition-all duration-500 ${
                           unlocked
                             ? 'bg-crimson-gradient shadow-crimson-glow-lg'
                             : 'bg-void-700 border border-crimson-500/20 shadow-crimson-glow'
@@ -528,7 +536,7 @@ function App() {
                             initial={{ scale: 0, rotate: -180 }}
                             animate={{ scale: 1, rotate: 0 }}
                             transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-                            className="w-16 h-16 sm:w-20 sm:h-20 text-white"
+                            className="w-14 h-14 sm:w-20 sm:h-20 text-white"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -542,7 +550,7 @@ function App() {
                           </motion.svg>
                         ) : (
                           <svg
-                            className="w-16 h-16 sm:w-20 sm:h-20 text-crimson-400"
+                            className="w-14 h-14 sm:w-20 sm:h-20 text-crimson-400"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -562,10 +570,10 @@ function App() {
                         <motion.div
                           animate={{ scale: [1, 1.1, 1] }}
                           transition={{ duration: 2, repeat: Infinity }}
-                          className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-crimson-600 flex items-center justify-center shadow-crimson-glow-sm"
+                          className="absolute -bottom-2 -right-2 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-crimson-600 flex items-center justify-center shadow-crimson-glow-sm"
                         >
                           <svg
-                            className="w-4 h-4 text-white"
+                            className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -582,8 +590,8 @@ function App() {
                     </motion.div>
 
                     {/* Status text */}
-                    <div className="text-center">
-                      <h2 className="font-display font-bold text-2xl sm:text-3xl mb-2">
+                    <div className="text-center w-full">
+                      <h2 className="font-display font-bold text-xl sm:text-2xl mb-1 sm:mb-2">
                         {unlocked ? (
                           <span className="shimmer-text">Reward Unlocked!</span>
                         ) : (
@@ -592,7 +600,7 @@ function App() {
                           </span>
                         )}
                       </h2>
-                      <p className="text-white/50 text-sm sm:text-base">
+                      <p className="text-white/50 text-sm sm:text-base px-2">
                         {unlocked
                           ? 'Congratulations! Your key is ready.'
                           : isAllComplete
@@ -627,13 +635,12 @@ function App() {
                           initial={{ opacity: 0, y: 10, scale: 0.9 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.9 }}
-                          whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.97 }}
                           onClick={handleGetKey}
-                          className="btn-crimson w-full !py-4 !text-base font-bold tracking-widest"
+                          className="btn-crimson w-full !py-3 sm:!py-4 !text-sm sm:!text-base font-bold tracking-widest"
                         >
                           <span className="flex items-center justify-center gap-2">
-                            <span className="text-xl leading-none">🔑</span>
+                            <span className="text-lg sm:text-xl leading-none">🔑</span>
                             GET ACCESS KEY
                           </span>
                         </motion.button>
@@ -653,7 +660,7 @@ function App() {
                     transition={{ type: 'spring', stiffness: 200, damping: 20 }}
                     className="absolute inset-0 flex items-center justify-center"
                   >
-                    <div className="glass-card p-8 text-center max-w-sm w-full border-crimson-500/30 shadow-crimson-glow-lg">
+                    <div className="glass-card p-6 sm:p-8 text-center max-w-sm w-full border-crimson-500/30 shadow-crimson-glow-lg">
                       <motion.div
                         animate={{ rotate: [0, 10, -10, 0] }}
                         transition={{ duration: 2, repeat: Infinity }}
@@ -684,35 +691,35 @@ function App() {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="w-full"
           >
-            <div className="glass-card p-6 sm:p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="font-display font-bold text-xl sm:text-2xl">
+            <div className="glass-card p-4 sm:p-6 w-full">
+              <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6">
+                <div className="min-w-0">
+                  <h2 className="font-display font-bold text-lg sm:text-xl">
                     Mission <span className="text-gradient-crimson">Steps</span>
                   </h2>
-                  <p className="text-white/40 text-sm mt-1">
-                    Complete steps in order to unlock the reward
+                  <p className="text-white/40 text-xs sm:text-sm mt-1">
+                    Complete steps in order
                   </p>
                 </div>
-                <div className="glass-card px-4 py-2 text-center">
-                  <div className="text-2xl font-bold text-crimson-400">
+                <div className="glass-card px-3 py-1.5 sm:px-4 sm:py-2 text-center shrink-0">
+                  <div className="text-xl sm:text-2xl font-bold text-crimson-400">
                     {completedCount}
-                    <span className="text-white/30 text-lg">/{totalTasks}</span>
+                    <span className="text-white/30 text-base sm:text-lg">/{totalTasks}</span>
                   </div>
-                  <div className="text-[10px] uppercase tracking-wider text-white/40">
+                  <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-white/40">
                     Complete
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {tasks.map((task, index) => (
                   <motion.div
                     key={task.id}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.4, delay: 0.4 + index * 0.1 }}
-                    className={`glass-card glass-card-hover p-4 flex items-center gap-4 ${
+                    transition={{ duration: 0.4, delay: 0.3 + index * 0.1 }}
+                    className={`glass-card glass-card-hover p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 w-full ${
                       task.completed
                         ? 'border-crimson-500/30'
                         : index === currentStepIndex
@@ -720,71 +727,75 @@ function App() {
                           : ''
                     }`}
                   >
-                    <div
-                      className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 transition-all duration-300 ${
-                        task.completed
-                          ? 'bg-crimson-gradient shadow-crimson-glow-sm'
-                          : index === currentStepIndex
-                            ? 'bg-crimson-500/10 border border-crimson-500/30'
-                            : 'bg-void-700 border border-white/5'
-                      }`}
-                    >
-                      {task.completed ? (
-                        <motion.svg
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-                          className="w-6 h-6 text-white"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2.5}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </motion.svg>
-                      ) : (
-                        <span className={index > currentStepIndex ? 'opacity-30' : 'opacity-60'}>
-                          {task.icon}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[10px] font-bold uppercase tracking-wider ${
-                            task.completed
-                              ? 'text-crimson-400'
-                              : index === currentStepIndex
-                                ? 'text-crimson-300'
-                                : 'text-white/30'
-                          }`}
-                        >
-                          Step {index + 1}/{totalTasks}
-                        </span>
-                        {index === currentStepIndex && !task.completed && (
-                          <span className="text-[10px] font-semibold uppercase tracking-wider bg-crimson-500/20 text-crimson-300 px-2 py-0.5 rounded-full border border-crimson-500/30">
-                            Active
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                      <div
+                        className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl shrink-0 transition-all duration-300 ${
+                          task.completed
+                            ? 'bg-crimson-gradient shadow-crimson-glow-sm'
+                            : index === currentStepIndex
+                              ? 'bg-crimson-500/10 border border-crimson-500/30'
+                              : 'bg-void-700 border border-white/5'
+                        }`}
+                      >
+                        {task.completed ? (
+                          <motion.svg
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                            className="w-5 h-5 sm:w-6 sm:h-6 text-white"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2.5}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </motion.svg>
+                        ) : (
+                          <span className={index > currentStepIndex ? 'opacity-30' : 'opacity-60'}>
+                            {task.icon}
                           </span>
                         )}
                       </div>
-                      <h3
-                        className={`font-semibold text-sm sm:text-base truncate ${
-                          task.completed ? 'text-white/60 line-through' : 'text-white'
-                        }`}
-                      >
-                        {task.title}
-                      </h3>
-                      <p className="text-white/40 text-xs sm:text-sm truncate">
-                        {task.description}
-                      </p>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wider ${
+                              task.completed
+                                ? 'text-crimson-400'
+                                : index === currentStepIndex
+                                  ? 'text-crimson-300'
+                                  : 'text-white/30'
+                            }`}
+                          >
+                            Step {index + 1}/{totalTasks}
+                          </span>
+                          {index === currentStepIndex && !task.completed && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wider bg-crimson-500/20 text-crimson-300 px-1.5 py-0.5 rounded-full border border-crimson-500/30">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <h3
+                          className={`font-semibold text-sm truncate ${
+                            task.completed ? 'text-white/60 line-through' : 'text-white'
+                          }`}
+                        >
+                          {task.title}
+                        </h3>
+                        <p className="text-white/40 text-xs truncate">
+                          {task.description}
+                        </p>
+                      </div>
                     </div>
 
-                    {renderTaskAction(task, index)}
+                    <div className="w-full sm:w-auto sm:shrink-0 flex justify-start sm:justify-end">
+                      {renderTaskAction(task, index)}
+                    </div>
                   </motion.div>
                 ))}
               </div>
@@ -796,12 +807,12 @@ function App() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    className="mt-6 p-4 rounded-xl bg-crimson-500/10 border border-crimson-500/30 flex items-center gap-3"
+                    className="mt-4 sm:mt-6 p-3 sm:p-4 rounded-xl bg-crimson-500/10 border border-crimson-500/30 flex items-center gap-3"
                   >
                     <motion.span
                       animate={{ scale: [1, 1.2, 1] }}
                       transition={{ duration: 1, repeat: Infinity }}
-                      className="text-2xl"
+                      className="text-xl sm:text-2xl"
                     >
                       ⚡
                     </motion.span>
@@ -810,7 +821,7 @@ function App() {
                         All steps complete!
                       </p>
                       <p className="text-white/50 text-xs">
-                        Click the GET ACCESS KEY button to unlock your reward.
+                        Click GET ACCESS KEY to unlock your reward.
                       </p>
                     </div>
                   </motion.div>
@@ -821,8 +832,8 @@ function App() {
         </div>
 
         {/* Footer */}
-        <footer className="mt-12 text-center">
-          <p className="text-white/30 text-sm">
+        <footer className="mt-8 sm:mt-12 text-center">
+          <p className="text-white/30 text-xs sm:text-sm">
             © 2024 Key Locker. All rights reserved.
           </p>
         </footer>
